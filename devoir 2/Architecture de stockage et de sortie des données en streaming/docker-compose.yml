@@ -1,0 +1,82 @@
+version: '3'
+
+services:
+  # Service ZooKeeper (nécessaire pour Kafka)
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.2
+    container_name: zookeeper-ventes
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2182
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2182:2182"
+    networks:
+      - app-network
+
+  # Service Kafka
+  kafka:
+    image: confluentinc/cp-kafka:7.3.2
+    container_name: kafka-ventes
+    depends_on:
+      - zookeeper
+    ports:
+      - "9093:9093"
+      - "29093:29093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2182
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9093,PLAINTEXT_HOST://localhost:29093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:29093
+    networks:
+      - app-network
+
+  # Service MongoDB
+  mongodb:
+    image: mongo:6.0
+    container_name: mongodb-ventes
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=ventes_db
+    networks:
+      - app-network
+
+  # Service Producteur
+  producer:
+    build:
+      context: .
+      dockerfile: Dockerfile.producer
+    container_name: producer-ventes
+    depends_on:
+      - kafka
+    networks:
+      - app-network
+    restart: on-failure
+
+  # Service Consommateur
+  consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile.consumer
+    container_name: consumer-ventes
+    depends_on:
+      - kafka
+      - mongodb
+    networks:
+      - app-network
+    restart: on-failure
+
+# Volumes persistants
+volumes:
+  mongodb_data:
+
+# Réseau partagé entre les services
+networks:
+  app-network:
+    driver: bridge
